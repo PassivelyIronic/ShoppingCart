@@ -1,4 +1,5 @@
-﻿using ShoppingCart.Models;
+﻿using Microsoft.Extensions.Caching.Memory;
+using ShoppingCart.Models;
 using System;
 using System.Net.Http;
 using System.Text.Json;
@@ -9,28 +10,62 @@ namespace ShoppingCart.Services
     public class ProductService
     {
         private readonly HttpClient _httpClient;
+        private readonly IMemoryCache _cache;
+        private readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5);
 
-        public ProductService(HttpClient httpClient)
+        public ProductService(HttpClient httpClient, IMemoryCache cache)
         {
             _httpClient = httpClient;
+            _cache = cache;
         }
 
         public async Task<ProductDto> GetProductByIdAsync(string productId)
         {
-            var response = await _httpClient.GetAsync($"http://localhost:4000/products/{productId}");
+            if (string.IsNullOrEmpty(productId))
+                throw new ArgumentException("Product ID cannot be null or empty", nameof(productId));
 
-            if (!response.IsSuccessStatusCode)
+            string cacheKey = $"product_{productId}";
+
+            // Próba pobrania z cache
+            if (_cache.TryGetValue(cacheKey, out ProductDto cachedProduct))
+                return cachedProduct;
+
+            try
             {
-                throw new Exception($"Product with ID {productId} not found. Status code: {response.StatusCode}");
+                var response = await _httpClient.GetAsync($"http://localhost:4000/products/{productId}");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        throw new Exception($"Product with ID {productId} not found.");
+                    else
+                        throw new Exception($"Failed to retrieve product. Status code: {response.StatusCode}");
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var product = JsonSerializer.Deserialize<ProductDto>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (product == null)
+                    throw new Exception($"Failed to deserialize product with ID {productId}");
+
+                // Zapisanie w cache
+                _cache.Set(cacheKey, product, _cacheDuration);
+
+                return product;
             }
-
-            var json = await response.Content.ReadAsStringAsync();
-            var product = JsonSerializer.Deserialize<ProductDto>(json, new JsonSerializerOptions
+            catch (HttpRequestException ex)
             {
-                PropertyNameCaseInsensitive = true
-            });
-
-            return product;
+                // Logowanie błędu komunikacji
+                throw new Exception($"Communication error with Product service: {ex.Message}", ex);
+            }
+            catch (JsonException ex)
+            {
+                // Logowanie błędu deserializacji
+                throw new Exception($"Error parsing product data: {ex.Message}", ex);
+            }
         }
     }
 }

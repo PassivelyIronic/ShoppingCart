@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using ShoppingCart.Repositories;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,6 +9,7 @@ namespace ShoppingCart.CQRS.Commands.Handlers
     public class CheckoutCartCommandHandler : IRequestHandler<CheckoutCartCommand, Unit>
     {
         private readonly CartRepository _repo;
+        private readonly int _maxRetries = 3;
 
         public CheckoutCartCommandHandler(CartRepository repo)
         {
@@ -16,14 +18,40 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 
         public async Task<Unit> Handle(CheckoutCartCommand request, CancellationToken cancellationToken)
         {
-            var cart = await _repo.GetByUserIdAsync(request.UserId);
-            if (cart == null || cart.IsCheckedOut)
-                throw new System.Exception("Cart not found or already checked out.");
+            int attempts = 0;
+            bool updateSuccessful = false;
 
-            cart.IsCheckedOut = true;
-            await _repo.UpdateAsync(cart);
+            while (!updateSuccessful && attempts < _maxRetries)
+            {
+                attempts++;
 
-            // Tu można dodać dalszą logikę (np. wysłanie eventu do kolejki)
+                var cart = await _repo.GetByUserIdAsync(request.UserId);
+                if (cart == null)
+                    throw new Exception("Cart not found.");
+
+                if (cart.IsCheckedOut)
+                    throw new Exception("Cart is already checked out.");
+
+                if (cart.Items.Count == 0)
+                    throw new Exception("Cannot checkout an empty cart.");
+
+                // Oznaczamy koszyk jako zatwierdzony
+                cart.IsCheckedOut = true;
+
+                // Próba aktualizacji z obsługą konfliktów
+                updateSuccessful = await _repo.UpdateAsync(cart);
+
+                if (!updateSuccessful && attempts < _maxRetries)
+                {
+                    await Task.Delay(50 * attempts, cancellationToken); // Backoff strategy
+                }
+            }
+
+            if (!updateSuccessful)
+                throw new Exception("Failed to checkout cart due to concurrent modifications. Please try again.");
+
+            // Tu można dodać dalsze działania (np. publikację eventu do kolejki)
+            // PublishCheckoutEvent(cart.Id, cart.UserId, cart.TotalValue);
 
             return Unit.Value;
         }
