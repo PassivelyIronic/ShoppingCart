@@ -32,15 +32,13 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                 if (cart == null || cart.IsCheckedOut)
                     throw new Exception("Cart not found or already checked out.");
 
-                // Usuwamy produkty z koszyka
                 cart.Items.RemoveAll(i => i.ProductId == request.ProductId);
 
-                // Próba aktualizacji z obsługą konfliktów
                 updateSuccessful = await _repo.UpdateAsync(cart);
 
                 if (!updateSuccessful && attempts < _maxRetries)
                 {
-                    await Task.Delay(50 * attempts, cancellationToken); // Backoff strategy
+                    await Task.Delay(50 * attempts, cancellationToken);
                 }
             }
 

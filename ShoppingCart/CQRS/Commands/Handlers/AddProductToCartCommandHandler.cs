@@ -11,7 +11,7 @@ namespace ShoppingCart.CQRS.Commands.Handlers
     {
         private readonly CartRepository _repo;
         private readonly ProductService _productService;
-        private readonly int _maxRetries = 3; // Maksymalna liczba prób przy konfliktach
+        private readonly int _maxRetries = 3;
 
         public AddProductToCartCommandHandler(CartRepository repo, ProductService productService)
         {
@@ -21,14 +21,12 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 
         public async Task<Unit> Handle(AddProductToCartCommand request, CancellationToken cancellationToken)
         {
-            // Walidacja wejścia
             if (request.Quantity <= 0)
                 throw new ArgumentException("Quantity must be greater than zero", nameof(request.Quantity));
 
             int attempts = 0;
             bool updateSuccessful = false;
 
-            // Mechanizm ponownych prób z obsługą konfliktów współbieżności
             while (!updateSuccessful && attempts < _maxRetries)
             {
                 attempts++;
@@ -51,13 +49,11 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                         Name = product.Name
                     });
 
-                // Próba aktualizacji z obsługą konfliktów
                 updateSuccessful = await _repo.UpdateAsync(cart);
 
-                // Jeśli aktualizacja się nie powiodła, poczekaj krótko przed ponowną próbą
                 if (!updateSuccessful && attempts < _maxRetries)
                 {
-                    await Task.Delay(50 * attempts, cancellationToken); // Backoff strategy
+                    await Task.Delay(50 * attempts, cancellationToken);
                 }
             }
 

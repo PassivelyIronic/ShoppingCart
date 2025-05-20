@@ -18,6 +18,7 @@ namespace ShoppingCart.Services
             _httpClient = httpClient;
             _cache = cache;
         }
+        //cache
 
         public async Task<ProductDto> GetProductByIdAsync(string productId)
         {
@@ -26,7 +27,6 @@ namespace ShoppingCart.Services
 
             string cacheKey = $"product_{productId}";
 
-            // Próba pobrania z cache
             if (_cache.TryGetValue(cacheKey, out ProductDto cachedProduct))
                 return cachedProduct;
 
@@ -51,19 +51,16 @@ namespace ShoppingCart.Services
                 if (product == null)
                     throw new Exception($"Failed to deserialize product with ID {productId}");
 
-                // Zapisanie w cache
                 _cache.Set(cacheKey, product, _cacheDuration);
 
                 return product;
             }
             catch (HttpRequestException ex)
             {
-                // Logowanie błędu komunikacji
                 throw new Exception($"Communication error with Product service: {ex.Message}", ex);
             }
             catch (JsonException ex)
             {
-                // Logowanie błędu deserializacji
                 throw new Exception($"Error parsing product data: {ex.Message}", ex);
             }
         }

@@ -29,23 +29,18 @@ namespace ShoppingCart.Repositories
 
         public async Task<bool> UpdateAsync(Cart cart)
         {
-            // Zapisujemy bieżącą wersję przed aktualizacją
             long currentVersion = cart.Version;
 
-            // Inkrementujemy wersję i aktualizujemy timestamp
             cart.Version++;
             cart.LastModified = DateTime.UtcNow;
 
-            // Filtr uwzględniający wersję dokumentu
             var filter = Builders<Cart>.Filter.And(
                 Builders<Cart>.Filter.Eq(c => c.Id, cart.Id),
                 Builders<Cart>.Filter.Eq(c => c.Version, currentVersion)
             );
 
-            // Próba aktualizacji z warunkiem na wersję
             var result = await _carts.ReplaceOneAsync(filter, cart);
 
-            // Zwracamy informację czy aktualizacja się powiodła (znaleziono dokument o odpowiedniej wersji)
             return result.ModifiedCount > 0;
         }
     }

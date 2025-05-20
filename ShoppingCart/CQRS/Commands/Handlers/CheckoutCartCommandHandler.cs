@@ -35,23 +35,18 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                 if (cart.Items.Count == 0)
                     throw new Exception("Cannot checkout an empty cart.");
 
-                // Oznaczamy koszyk jako zatwierdzony
                 cart.IsCheckedOut = true;
 
-                // Próba aktualizacji z obsługą konfliktów
                 updateSuccessful = await _repo.UpdateAsync(cart);
 
                 if (!updateSuccessful && attempts < _maxRetries)
                 {
-                    await Task.Delay(50 * attempts, cancellationToken); // Backoff strategy
+                    await Task.Delay(50 * attempts, cancellationToken);
                 }
             }
 
             if (!updateSuccessful)
                 throw new Exception("Failed to checkout cart due to concurrent modifications. Please try again.");
-
-            // Tu można dodać dalsze działania (np. publikację eventu do kolejki)
-            // PublishCheckoutEvent(cart.Id, cart.UserId, cart.TotalValue);
 
             return Unit.Value;
         }

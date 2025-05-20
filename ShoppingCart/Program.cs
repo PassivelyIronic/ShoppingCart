@@ -13,19 +13,15 @@ using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Dodanie logowania
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-// Us³ugi podstawowe
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Memory Cache
 builder.Services.AddMemoryCache();
 
-// MongoDB
 builder.Services.AddSingleton<IMongoClient>(sp =>
     new MongoClient(builder.Configuration.GetConnectionString("MongoDb")));
 
@@ -34,13 +30,11 @@ builder.Services.AddSingleton(sp =>
 
 builder.Services.AddSingleton<CartRepository>();
 
-// MediatR dla wzorca CQRS
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
 });
 
-// Konfiguracja HTTP Client z Polly dla obs³ugi awarii
 builder.Services.AddHttpClient<ProductService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
@@ -50,7 +44,6 @@ builder.Services.AddHttpClient<ProductService>(client =>
 
 var app = builder.Build();
 
-// Konfiguracja potoku HTTP
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -63,7 +56,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Dodanie obs³ugi wyj¹tków middleware
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
