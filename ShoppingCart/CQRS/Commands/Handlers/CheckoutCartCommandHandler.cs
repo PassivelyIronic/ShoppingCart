@@ -8,45 +8,23 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 {
     public class CheckoutCartCommandHandler : IRequestHandler<CheckoutCartCommand, Unit>
     {
-        private readonly CartRepository _repo;
-        private readonly int _maxRetries = 3;
+        private readonly CartAggregateRepository _repository;
 
-        public CheckoutCartCommandHandler(CartRepository repo)
+        public CheckoutCartCommandHandler(CartAggregateRepository repository)
         {
-            _repo = repo;
+            _repository = repository;
         }
 
         public async Task<Unit> Handle(CheckoutCartCommand request, CancellationToken cancellationToken)
         {
-            int attempts = 0;
-            bool updateSuccessful = false;
+            var aggregate = await _repository.GetByUserIdAsync(request.UserId);
+            if (aggregate == null)
+                throw new InvalidOperationException("Cart not found");
 
-            while (!updateSuccessful && attempts < _maxRetries)
-            {
-                attempts++;
+            // Operacja checkout może być wykonana tylko raz - sprawdzenie w agregacie
+            aggregate.Checkout();
 
-                var cart = await _repo.GetByUserIdAsync(request.UserId);
-                if (cart == null)
-                    throw new Exception("Cart not found.");
-
-                if (cart.IsCheckedOut)
-                    throw new Exception("Cart is already checked out.");
-
-                if (cart.Items.Count == 0)
-                    throw new Exception("Cannot checkout an empty cart.");
-
-                cart.IsCheckedOut = true;
-
-                updateSuccessful = await _repo.UpdateAsync(cart);
-
-                if (!updateSuccessful && attempts < _maxRetries)
-                {
-                    await Task.Delay(50 * attempts, cancellationToken);
-                }
-            }
-
-            if (!updateSuccessful)
-                throw new Exception("Failed to checkout cart due to concurrent modifications. Please try again.");
+            await _repository.SaveAsync(aggregate);
 
             return Unit.Value;
         }

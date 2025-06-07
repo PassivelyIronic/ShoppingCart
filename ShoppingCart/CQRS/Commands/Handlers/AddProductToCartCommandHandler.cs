@@ -9,13 +9,12 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 {
     public class AddProductToCartCommandHandler : IRequestHandler<AddProductToCartCommand, Unit>
     {
-        private readonly CartRepository _repo;
+        private readonly CartAggregateRepository _repository;
         private readonly ProductService _productService;
-        private readonly int _maxRetries = 3;
 
-        public AddProductToCartCommandHandler(CartRepository repo, ProductService productService)
+        public AddProductToCartCommandHandler(CartAggregateRepository repository, ProductService productService)
         {
-            _repo = repo;
+            _repository = repository;
             _productService = productService;
         }
 
@@ -24,41 +23,17 @@ namespace ShoppingCart.CQRS.Commands.Handlers
             if (request.Quantity <= 0)
                 throw new ArgumentException("Quantity must be greater than zero", nameof(request.Quantity));
 
-            int attempts = 0;
-            bool updateSuccessful = false;
+            var aggregate = await _repository.GetByUserIdAsync(request.UserId);
+            if (aggregate == null)
+                throw new InvalidOperationException("Cart not found. Please create a cart first.");
 
-            while (!updateSuccessful && attempts < _maxRetries)
-            {
-                attempts++;
+            var product = await _productService.GetProductByIdAsync(request.ProductId);
 
-                var cart = await _repo.GetByUserIdAsync(request.UserId);
-                if (cart == null || cart.IsCheckedOut)
-                    throw new Exception("Cart not found or already checked out.");
+            // Event Sourcing - operacja jest zawsze wykonywana
+            // Konflikt zostanie rozwiązany na poziomie agregatu
+            aggregate.AddProduct(request.ProductId, request.Quantity, product.Price, product.Name);
 
-                var product = await _productService.GetProductByIdAsync(request.ProductId);
-
-                var item = cart.Items.Find(i => i.ProductId == request.ProductId);
-                if (item != null)
-                    item.Quantity += request.Quantity;
-                else
-                    cart.Items.Add(new Models.CartItem
-                    {
-                        ProductId = request.ProductId,
-                        Quantity = request.Quantity,
-                        Price = product.Price,
-                        Name = product.Name
-                    });
-
-                updateSuccessful = await _repo.UpdateAsync(cart);
-
-                if (!updateSuccessful && attempts < _maxRetries)
-                {
-                    await Task.Delay(50 * attempts, cancellationToken);
-                }
-            }
-
-            if (!updateSuccessful)
-                throw new Exception("Failed to update cart due to concurrent modifications. Please try again.");
+            await _repository.SaveAsync(aggregate);
 
             return Unit.Value;
         }

@@ -8,12 +8,11 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 {
     public class RemoveProductFromCartCommandHandler : IRequestHandler<RemoveProductFromCartCommand, Unit>
     {
-        private readonly CartRepository _repo;
-        private readonly int _maxRetries = 3;
+        private readonly CartAggregateRepository _repository;
 
-        public RemoveProductFromCartCommandHandler(CartRepository repo)
+        public RemoveProductFromCartCommandHandler(CartAggregateRepository repository)
         {
-            _repo = repo;
+            _repository = repository;
         }
 
         public async Task<Unit> Handle(RemoveProductFromCartCommand request, CancellationToken cancellationToken)
@@ -21,29 +20,14 @@ namespace ShoppingCart.CQRS.Commands.Handlers
             if (string.IsNullOrEmpty(request.ProductId))
                 throw new ArgumentException("Product ID cannot be empty", nameof(request.ProductId));
 
-            int attempts = 0;
-            bool updateSuccessful = false;
+            var aggregate = await _repository.GetByUserIdAsync(request.UserId);
+            if (aggregate == null)
+                throw new InvalidOperationException("Cart not found");
 
-            while (!updateSuccessful && attempts < _maxRetries)
-            {
-                attempts++;
+            // Event Sourcing - operacja jest zawsze wykonywana
+            aggregate.RemoveProduct(request.ProductId);
 
-                var cart = await _repo.GetByUserIdAsync(request.UserId);
-                if (cart == null || cart.IsCheckedOut)
-                    throw new Exception("Cart not found or already checked out.");
-
-                cart.Items.RemoveAll(i => i.ProductId == request.ProductId);
-
-                updateSuccessful = await _repo.UpdateAsync(cart);
-
-                if (!updateSuccessful && attempts < _maxRetries)
-                {
-                    await Task.Delay(50 * attempts, cancellationToken);
-                }
-            }
-
-            if (!updateSuccessful)
-                throw new Exception("Failed to update cart due to concurrent modifications. Please try again.");
+            await _repository.SaveAsync(aggregate);
 
             return Unit.Value;
         }
