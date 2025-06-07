@@ -35,9 +35,6 @@ ConfigureBsonSerialization();
 builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<CartAggregateRepository>();
 
-// Keep old repository for potential data migration or read models
-builder.Services.AddSingleton<CartRepository>();
-
 // MediatR
 builder.Services.AddMediatR(cfg =>
 {
