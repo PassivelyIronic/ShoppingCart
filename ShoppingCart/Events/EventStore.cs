@@ -31,7 +31,6 @@ namespace ShoppingCart.Events
                 .ToListAsync();
         }
 
-        // Nowa metoda do znajdowania wydarzeń dla użytkownika
         public async Task<List<CartEvent>> GetEventsByUserIdAsync(string userId)
         {
             return await _events.Find(e => e.UserId == userId)
@@ -50,6 +49,12 @@ namespace ShoppingCart.Events
 
         public async Task SaveEventAsync(CartEvent cartEvent)
         {
+            // Upewnij się, że wydarzenie ma unikalne ID
+            if (string.IsNullOrEmpty(cartEvent.Id))
+            {
+                cartEvent.Id = Guid.NewGuid().ToString();
+            }
+
             cartEvent.SequenceNumber = await GetNextSequenceNumberAsync(cartEvent.CartId);
             await _events.InsertOneAsync(cartEvent);
         }
@@ -63,10 +68,24 @@ namespace ShoppingCart.Events
 
             foreach (var evt in events)
             {
+                // Upewnij się, że każde wydarzenie ma unikalne ID
+                if (string.IsNullOrEmpty(evt.Id))
+                {
+                    evt.Id = Guid.NewGuid().ToString();
+                }
                 evt.SequenceNumber = nextSequence++;
             }
 
-            await _events.InsertManyAsync(events);
+            // Używaj InsertManyAsync zamiast operacji update
+            try
+            {
+                await _events.InsertManyAsync(events);
+            }
+            catch (MongoBulkWriteException ex)
+            {
+                // Loguj szczegóły błędu dla debugowania
+                throw new InvalidOperationException($"Failed to save events: {ex.Message}", ex);
+            }
         }
     }
 }

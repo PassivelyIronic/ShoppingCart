@@ -19,6 +19,7 @@ namespace ShoppingCart.Models
         {
             var evt = new CartCreatedEvent
             {
+                Id = Guid.NewGuid().ToString(), // Eksplicitnie ustaw unikalne ID
                 CartId = id,
                 UserId = userId
             };
@@ -51,6 +52,7 @@ namespace ShoppingCart.Models
 
             var evt = new ProductAddedToCartEvent
             {
+                Id = Guid.NewGuid().ToString(), // Eksplicitnie ustaw unikalne ID
                 CartId = Id,
                 UserId = UserId,
                 ProductId = productId,
@@ -73,6 +75,7 @@ namespace ShoppingCart.Models
 
             var evt = new ProductRemovedFromCartEvent
             {
+                Id = Guid.NewGuid().ToString(), // Eksplicitnie ustaw unikalne ID
                 CartId = Id,
                 UserId = UserId,
                 ProductId = productId
@@ -92,6 +95,7 @@ namespace ShoppingCart.Models
 
             var evt = new CartCheckedOutEvent
             {
+                Id = Guid.NewGuid().ToString(), // Eksplicitnie ustaw unikalne ID
                 CartId = Id,
                 UserId = UserId,
                 TotalValue = TotalValue,
