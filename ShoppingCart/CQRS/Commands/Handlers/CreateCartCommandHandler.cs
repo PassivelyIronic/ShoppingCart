@@ -24,6 +24,7 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                 throw new InvalidOperationException("User already has an active cart");
             }
 
+            // Wygeneruj unikalny CartId - może być po prostu GUID
             var cartId = Guid.NewGuid().ToString();
             var aggregate = new CartAggregate(cartId, request.UserId);
 

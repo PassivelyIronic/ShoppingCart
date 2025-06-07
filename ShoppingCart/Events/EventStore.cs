@@ -1,6 +1,7 @@
 ﻿using MongoDB.Driver;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace ShoppingCart.Events
 {
@@ -12,17 +13,29 @@ namespace ShoppingCart.Events
         {
             _events = database.GetCollection<CartEvent>("events");
 
-            // Utworzenie indeksu dla wydajności
+            // Utworzenie indeksów dla wydajności
             var indexKeysDefinition = Builders<CartEvent>.IndexKeys
                 .Ascending(e => e.CartId)
                 .Ascending(e => e.SequenceNumber);
             _events.Indexes.CreateOne(new CreateIndexModel<CartEvent>(indexKeysDefinition));
+
+            // Dodatkowy indeks dla UserId
+            var userIndexKeys = Builders<CartEvent>.IndexKeys.Ascending(e => e.UserId);
+            _events.Indexes.CreateOne(new CreateIndexModel<CartEvent>(userIndexKeys));
         }
 
         public async Task<List<CartEvent>> GetEventsForCartAsync(string cartId)
         {
             return await _events.Find(e => e.CartId == cartId)
                 .SortBy(e => e.SequenceNumber)
+                .ToListAsync();
+        }
+
+        // Nowa metoda do znajdowania wydarzeń dla użytkownika
+        public async Task<List<CartEvent>> GetEventsByUserIdAsync(string userId)
+        {
+            return await _events.Find(e => e.UserId == userId)
+                .SortBy(e => e.Timestamp)
                 .ToListAsync();
         }
 

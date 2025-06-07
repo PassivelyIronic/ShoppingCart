@@ -2,6 +2,7 @@
 using ShoppingCart.Events;
 using ShoppingCart.Models;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace ShoppingCart.Repositories
 {
@@ -18,19 +19,28 @@ namespace ShoppingCart.Repositories
 
         public async Task<CartAggregate> GetByUserIdAsync(string userId)
         {
-            // Znajdź aktywny koszyk użytkownika (niesprawdzony)
-            var allEvents = await _eventStore.GetEventsForCartAsync($"user-{userId}");
+            // Znajdź wszystkie wydarzenia dla użytkownika
+            var allEvents = await _eventStore.GetEventsByUserIdAsync(userId);
 
             if (!allEvents.Any())
                 return null;
 
-            // Znajdź ostatni aktywny koszyk
-            var cartEvents = allEvents.Where(e => !IsCartCheckedOut(allEvents, e.CartId)).ToList();
+            // Grupuj wydarzenia według CartId
+            var eventsByCart = allEvents.GroupBy(e => e.CartId).ToList();
 
-            if (!cartEvents.Any())
-                return null;
+            // Znajdź ostatni aktywny koszyk (nieukończony)
+            foreach (var cartGroup in eventsByCart.OrderByDescending(g => g.Max(e => e.Timestamp)))
+            {
+                var cartEvents = cartGroup.OrderBy(e => e.SequenceNumber).ToList();
+                var isCheckedOut = cartEvents.Any(e => e is CartCheckedOutEvent);
 
-            return CartAggregate.FromEvents(cartEvents);
+                if (!isCheckedOut)
+                {
+                    return CartAggregate.FromEvents(cartEvents);
+                }
+            }
+
+            return null; // Wszystkie koszyki są już zamknięte
         }
 
         public async Task<CartAggregate> GetByIdAsync(string cartId)
@@ -70,14 +80,9 @@ namespace ShoppingCart.Repositories
             var filter = Builders<CartSnapshot>.Filter.Eq(s => s.CartId, aggregate.Id);
             await _snapshots.ReplaceOneAsync(filter, snapshot, new ReplaceOptions { IsUpsert = true });
         }
-
-        private bool IsCartCheckedOut(List<CartEvent> events, string cartId)
-        {
-            return events.Any(e => e.CartId == cartId && e is CartCheckedOutEvent);
-        }
     }
 
-    // ShoppingCart/Models/CartSnapshot.cs - do optymalizacji odczytu
+    // Klasa snapshot pozostaje bez zmian
     public class CartSnapshot
     {
         public string Id { get; set; } = Guid.NewGuid().ToString();
