@@ -152,8 +152,6 @@ namespace ShoppingCart.Models
                     break;
             }
 
-            // POPRAWKA: Version zawsze ustawiana na sequence number eventu
-            // Jeśli event nie ma jeszcze sequence number (uncommitted), zachowaj poprzednią wersję + 1
             Version = evt.SequenceNumber > 0 ? evt.SequenceNumber : Version + 1;
         }
 

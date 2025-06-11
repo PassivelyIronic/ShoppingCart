@@ -24,7 +24,6 @@ namespace ShoppingCart.CQRS.Commands.Handlers
             if (aggregate == null)
                 throw new InvalidOperationException("Cart not found");
 
-            // Event Sourcing - operacja jest zawsze wykonywana
             aggregate.RemoveProduct(request.ProductId);
 
             await _repository.SaveAsync(aggregate);

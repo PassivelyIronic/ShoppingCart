@@ -8,7 +8,7 @@ namespace ShoppingCart.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.String)]
-        public string Id { get; set; } // CartId
+        public string Id { get; set; }
 
         [BsonElement("userId")]
         public string UserId { get; set; }

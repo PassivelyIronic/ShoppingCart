@@ -83,8 +83,8 @@ static void ConfigureBsonSerialization()
             cm.AutoMap();
             cm.SetIsRootClass(true);
             // Usuñ discriminator - nie u¿ywamy _t
-            cm.SetDiscriminator("EventType");
-            cm.SetDiscriminatorIsRequired(true);
+            //cm.SetDiscriminator("EventType");
+            //cm.SetDiscriminatorIsRequired(true);
             cm.AddKnownType(typeof(CartCreatedEvent));
             cm.AddKnownType(typeof(ProductAddedToCartEvent));
             cm.AddKnownType(typeof(ProductRemovedFromCartEvent));

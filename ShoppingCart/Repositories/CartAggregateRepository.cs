@@ -20,14 +20,12 @@ namespace ShoppingCart.Repositories
             _cartAggregates = database.GetCollection<CartAggregateDocument>("cartaggregate");
             _carts = database.GetCollection<Cart>("carts");
 
-            // Indeksy dla cartAggregate
             var userIdIndex = Builders<CartAggregateDocument>.IndexKeys.Ascending(x => x.UserId);
             _cartAggregates.Indexes.CreateOne(new CreateIndexModel<CartAggregateDocument>(userIdIndex));
         }
 
         public async Task<CartAggregate> GetByUserIdAsync(string userId)
         {
-            // Najpierw sprawdź czy istnieje aktywny cart w cartAggregate (nie checkout)
             var activeCartDoc = await _cartAggregates
                 .Find(x => x.UserId == userId && !x.IsCheckedOut)
                 .SortByDescending(x => x.LastModified)
@@ -38,7 +36,6 @@ namespace ShoppingCart.Repositories
                 return CartAggregate.FromEvents(activeCartDoc.Events.OrderBy(e => e.SequenceNumber).ToList());
             }
 
-            // Fallback - sprawdź stare eventy w event store
             var allEvents = await _eventStore.GetEventsByUserIdAsync(userId);
             if (!allEvents.Any())
                 return null;
@@ -61,14 +58,12 @@ namespace ShoppingCart.Repositories
 
         public async Task<CartAggregate> GetByIdAsync(string cartId)
         {
-            // Sprawdź w cartAggregate
             var cartDoc = await _cartAggregates.Find(x => x.Id == cartId).FirstOrDefaultAsync();
             if (cartDoc != null)
             {
                 return CartAggregate.FromEvents(cartDoc.Events.OrderBy(e => e.SequenceNumber).ToList());
             }
 
-            // Fallback - sprawdź w event store
             var events = await _eventStore.GetEventsForCartAsync(cartId);
             return CartAggregate.FromEvents(events);
         }
@@ -78,17 +73,14 @@ namespace ShoppingCart.Repositories
             var uncommittedEvents = aggregate.GetUncommittedEvents();
             if (!uncommittedEvents.Any()) return;
 
-            // Sprawdź czy to checkout
             var isCheckout = uncommittedEvents.Any(e => e is CartCheckedOutEvent);
 
             if (isCheckout)
             {
-                // Pri checkout: zapisz wszystkie eventy w cartAggregate, przenieś do carts, usuń z cartAggregate
                 await HandleCheckoutAsync(aggregate, uncommittedEvents);
             }
             else
             {
-                // Normalne operacje: aktualizuj cartAggregate
                 await UpdateCartAggregateAsync(aggregate, uncommittedEvents);
             }
 
@@ -97,51 +89,42 @@ namespace ShoppingCart.Repositories
 
         private async Task HandleCheckoutAsync(CartAggregate aggregate, List<CartEvent> uncommittedEvents)
         {
-            // 1. Pobierz istniejący dokument cartAggregate
             var existingDoc = await _cartAggregates.Find(x => x.Id == aggregate.Id).FirstOrDefaultAsync();
 
             List<CartEvent> allEvents;
             if (existingDoc != null)
             {
-                // Połącz stare eventy z nowymi
                 allEvents = existingDoc.Events.Concat(uncommittedEvents).OrderBy(e => e.SequenceNumber).ToList();
             }
             else
             {
-                // Tylko nowe eventy (nie powinno się zdarzyć, ale na wszelki wypadek)
                 allEvents = uncommittedEvents;
             }
 
-            // 2. Zapisz w event store (dla historii) - to ustawi sequence numbers
             await _eventStore.SaveEventsAsync(uncommittedEvents);
 
-            // 3. POPRAWKA: Po zapisaniu eventów w EventStore, odtwórz agregat z wszystkimi eventami
-            // aby mieć poprawną wersję z sequence number eventu checkout
             var completeEvents = await _eventStore.GetEventsForCartAsync(aggregate.Id);
             var rebuiltAggregate = CartAggregate.FromEvents(completeEvents);
 
-            // 4. Utwórz finalne Cart do zapisania w kolekcji carts z poprawną wersją
             var finalCart = new Cart
             {
                 Id = rebuiltAggregate.Id,
                 UserId = rebuiltAggregate.UserId,
                 Items = rebuiltAggregate.Items,
                 IsCheckedOut = true,
-                Version = rebuiltAggregate.Version, // To będzie sequence number eventu checkout
+                Version = rebuiltAggregate.Version,
                 LastModified = DateTime.UtcNow
             };
 
-            // 5. Zapisz w kolekcji carts
             await _carts.InsertOneAsync(finalCart);
 
-            // 6. Oznacz cartAggregate jako checkout i zachowaj wszystkie eventy z poprawnymi sequence numbers
             var finalCartDoc = new CartAggregateDocument
             {
                 Id = rebuiltAggregate.Id,
                 UserId = rebuiltAggregate.UserId,
-                Events = completeEvents, // Użyj eventów z EventStore z poprawnymi sequence numbers
+                Events = completeEvents,
                 IsCheckedOut = true,
-                Version = rebuiltAggregate.Version, // Poprawna wersja z sequence number checkout eventu
+                Version = rebuiltAggregate.Version,
                 LastModified = DateTime.UtcNow
             };
 
@@ -157,35 +140,30 @@ namespace ShoppingCart.Repositories
 
         private async Task UpdateCartAggregateAsync(CartAggregate aggregate, List<CartEvent> uncommittedEvents)
         {
-            // 1. Zapisz eventy w event store - to ustawi sequence numbers
             await _eventStore.SaveEventsAsync(uncommittedEvents);
 
-            // 2. POPRAWKA: Po zapisaniu eventów, odbuduj agregat aby mieć poprawną wersję
             var allEvents = await _eventStore.GetEventsForCartAsync(aggregate.Id);
             var rebuiltAggregate = CartAggregate.FromEvents(allEvents);
 
-            // 3. Aktualizuj cartAggregate
             var existingDoc = await _cartAggregates.Find(x => x.Id == aggregate.Id).FirstOrDefaultAsync();
 
             if (existingDoc != null)
             {
-                // Użyj wszystkich eventów z EventStore z poprawnymi sequence numbers
                 existingDoc.Events = allEvents;
-                existingDoc.Version = rebuiltAggregate.Version; // Wersja z ostatniego sequence number
+                existingDoc.Version = rebuiltAggregate.Version;
                 existingDoc.LastModified = DateTime.UtcNow;
 
                 await _cartAggregates.ReplaceOneAsync(x => x.Id == aggregate.Id, existingDoc);
             }
             else
             {
-                // Utwórz nowy dokument
                 var newDoc = new CartAggregateDocument
                 {
                     Id = rebuiltAggregate.Id,
                     UserId = rebuiltAggregate.UserId,
-                    Events = allEvents, // Wszystkie eventy z EventStore
+                    Events = allEvents,
                     IsCheckedOut = false,
-                    Version = rebuiltAggregate.Version, // Poprawna wersja
+                    Version = rebuiltAggregate.Version,
                     LastModified = DateTime.UtcNow
                 };
 
@@ -193,6 +171,7 @@ namespace ShoppingCart.Repositories
             }
         }
 
+        //nieaktualne
         private async Task SaveSnapshotAsync(CartAggregate aggregate)
         {
             var snapshot = new CartSnapshot

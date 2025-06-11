@@ -17,15 +17,12 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 
         public async Task<string> Handle(CreateCartCommand request, CancellationToken cancellationToken)
         {
-            // Sprawdź czy użytkownik już ma aktywny koszyk
             var existingCart = await _repository.GetByUserIdAsync(request.UserId);
             if (existingCart != null && !existingCart.IsCheckedOut)
             {
-                // Zwróć ID istniejącego aktywnego koszyka zamiast rzucać wyjątek
                 return existingCart.Id;
             }
 
-            // Wygeneruj unikalny CartId
             var cartId = Guid.NewGuid().ToString();
             var aggregate = new CartAggregate(cartId, request.UserId);
 

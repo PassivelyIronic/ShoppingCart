@@ -22,7 +22,6 @@ namespace ShoppingCart.CQRS.Queries.Handlers
             if (aggregate == null)
                 return null;
 
-            // Konwertuj agregat na model Cart dla API
             return new Cart
             {
                 Id = aggregate.Id,

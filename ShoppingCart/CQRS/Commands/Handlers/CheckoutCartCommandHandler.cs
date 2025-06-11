@@ -25,11 +25,10 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                 throw new InvalidOperationException("Cart not found");
 
             foreach (var item in aggregate.Items)
-            {
+            {   //niedokończone; sprawdzanie czy pordukt jest jeszcze dostepny
                 try
                 {
                     var product = await _productService.GetProductByIdAsync(item.ProductId);
-                    // Sprawdź czy cena się nie zmieniła znacząco
                     if (Math.Abs(product.Price - item.Price) > 0.01m)
                     {
                         throw new InvalidOperationException(
@@ -43,7 +42,6 @@ namespace ShoppingCart.CQRS.Commands.Handlers
                 }
             }
 
-            // Operacja checkout może być wykonana tylko raz
             aggregate.Checkout();
 
             await _repository.SaveAsync(aggregate);
