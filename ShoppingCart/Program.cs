@@ -25,7 +25,7 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
     new MongoClient(builder.Configuration.GetConnectionString("MongoDb")));
 
 builder.Services.AddSingleton(sp =>
-    sp.GetRequiredService<IMongoClient>().GetDatabase("shoppingcartdb"));
+    sp.GetRequiredService<IMongoClient>().GetDatabase("shoppingcartdb2"));
 
 ConfigureBsonSerialization();
 
@@ -82,6 +82,9 @@ static void ConfigureBsonSerialization()
         {
             cm.AutoMap();
             cm.SetIsRootClass(true);
+            // Usuñ discriminator - nie u¿ywamy _t
+            cm.SetDiscriminator("EventType");
+            cm.SetDiscriminatorIsRequired(true);
             cm.AddKnownType(typeof(CartCreatedEvent));
             cm.AddKnownType(typeof(ProductAddedToCartEvent));
             cm.AddKnownType(typeof(ProductRemovedFromCartEvent));

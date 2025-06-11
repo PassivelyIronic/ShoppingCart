@@ -7,7 +7,7 @@ namespace ShoppingCart.Events
     {
         [BsonId]
         [BsonRepresentation(BsonType.String)]
-        public string Id { get; set; } // POPRAWKA: Usuń inicjalizację tutaj
+        public string Id { get; set; }
 
         public string CartId { get; set; }
         public string UserId { get; set; }
@@ -18,8 +18,6 @@ namespace ShoppingCart.Events
         protected CartEvent()
         {
             EventType = GetType().Name;
-            // POPRAWKA: Nie ustawiaj ID w konstruktorze
-            // ID będzie ustawiane przez EventStore przed zapisem
         }
     }
 }

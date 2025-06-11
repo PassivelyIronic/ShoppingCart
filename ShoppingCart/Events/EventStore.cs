@@ -13,13 +13,11 @@ namespace ShoppingCart.Events
         {
             _events = database.GetCollection<CartEvent>("events");
 
-            // Utworzenie indeksów dla wydajności
             var indexKeysDefinition = Builders<CartEvent>.IndexKeys
                 .Ascending(e => e.CartId)
                 .Ascending(e => e.SequenceNumber);
             _events.Indexes.CreateOne(new CreateIndexModel<CartEvent>(indexKeysDefinition));
 
-            // Dodatkowy indeks dla UserId
             var userIndexKeys = Builders<CartEvent>.IndexKeys.Ascending(e => e.UserId);
             _events.Indexes.CreateOne(new CreateIndexModel<CartEvent>(userIndexKeys));
         }
@@ -49,7 +47,6 @@ namespace ShoppingCart.Events
 
         public async Task SaveEventAsync(CartEvent cartEvent)
         {
-            // POPRAWKA: Zawsze generuj nowe ID przed zapisem
             cartEvent.Id = Guid.NewGuid().ToString();
             cartEvent.SequenceNumber = await GetNextSequenceNumberAsync(cartEvent.CartId);
 
@@ -63,21 +60,18 @@ namespace ShoppingCart.Events
             string cartId = events.First().CartId;
             long nextSequence = await GetNextSequenceNumberAsync(cartId);
 
-            // POPRAWKA: Zawsze generuj nowe unikalne ID dla każdego eventu
             foreach (var evt in events)
             {
-                evt.Id = Guid.NewGuid().ToString(); // Zawsze nowe ID
+                evt.Id = Guid.NewGuid().ToString();
                 evt.SequenceNumber = nextSequence++;
             }
 
-            // POPRAWKA: Używaj tylko InsertManyAsync - nigdy update
             try
             {
                 await _events.InsertManyAsync(events);
             }
             catch (MongoBulkWriteException ex)
             {
-                // Lepsze logowanie błędów
                 var details = string.Join(", ", ex.WriteErrors.Select(e => $"Index: {e.Index}, Code: {e.Code}, Message: {e.Message}"));
                 throw new InvalidOperationException($"Failed to save events. Details: {details}", ex);
             }
