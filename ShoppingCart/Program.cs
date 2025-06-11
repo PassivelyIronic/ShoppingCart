@@ -21,27 +21,22 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddMemoryCache();
 
-// MongoDB Configuration
 builder.Services.AddSingleton<IMongoClient>(sp =>
     new MongoClient(builder.Configuration.GetConnectionString("MongoDb")));
 
 builder.Services.AddSingleton(sp =>
     sp.GetRequiredService<IMongoClient>().GetDatabase("shoppingcartdb"));
 
-// Event Sourcing Configuration
 ConfigureBsonSerialization();
 
-// Register Event Store and Repository
 builder.Services.AddSingleton<EventStore>();
 builder.Services.AddSingleton<CartAggregateRepository>();
 
-// MediatR
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
 });
 
-// HTTP Client for Product Service
 builder.Services.AddHttpClient<ProductService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
@@ -59,7 +54,6 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
-// Global exception handling
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -82,7 +76,6 @@ app.Run();
 
 static void ConfigureBsonSerialization()
 {
-    // Registracja mapowania klas dla MongoDB
     if (!BsonClassMap.IsClassMapRegistered(typeof(CartEvent)))
     {
         BsonClassMap.RegisterClassMap<CartEvent>(cm =>
