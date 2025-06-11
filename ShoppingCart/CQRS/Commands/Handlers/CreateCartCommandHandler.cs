@@ -21,10 +21,11 @@ namespace ShoppingCart.CQRS.Commands.Handlers
             var existingCart = await _repository.GetByUserIdAsync(request.UserId);
             if (existingCart != null && !existingCart.IsCheckedOut)
             {
-                throw new InvalidOperationException("User already has an active cart");
+                // Zwróć ID istniejącego aktywnego koszyka zamiast rzucać wyjątek
+                return existingCart.Id;
             }
 
-            // Wygeneruj unikalny CartId - może być po prostu GUID
+            // Wygeneruj unikalny CartId
             var cartId = Guid.NewGuid().ToString();
             var aggregate = new CartAggregate(cartId, request.UserId);
 

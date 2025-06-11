@@ -49,13 +49,10 @@ namespace ShoppingCart.Events
 
         public async Task SaveEventAsync(CartEvent cartEvent)
         {
-            // Upewnij się, że wydarzenie ma unikalne ID
-            if (string.IsNullOrEmpty(cartEvent.Id))
-            {
-                cartEvent.Id = Guid.NewGuid().ToString();
-            }
-
+            // POPRAWKA: Zawsze generuj nowe ID przed zapisem
+            cartEvent.Id = Guid.NewGuid().ToString();
             cartEvent.SequenceNumber = await GetNextSequenceNumberAsync(cartEvent.CartId);
+
             await _events.InsertOneAsync(cartEvent);
         }
 
@@ -66,25 +63,27 @@ namespace ShoppingCart.Events
             string cartId = events.First().CartId;
             long nextSequence = await GetNextSequenceNumberAsync(cartId);
 
+            // POPRAWKA: Zawsze generuj nowe unikalne ID dla każdego eventu
             foreach (var evt in events)
             {
-                // Upewnij się, że każde wydarzenie ma unikalne ID
-                if (string.IsNullOrEmpty(evt.Id))
-                {
-                    evt.Id = Guid.NewGuid().ToString();
-                }
+                evt.Id = Guid.NewGuid().ToString(); // Zawsze nowe ID
                 evt.SequenceNumber = nextSequence++;
             }
 
-            // Używaj InsertManyAsync zamiast operacji update
+            // POPRAWKA: Używaj tylko InsertManyAsync - nigdy update
             try
             {
                 await _events.InsertManyAsync(events);
             }
             catch (MongoBulkWriteException ex)
             {
-                // Loguj szczegóły błędu dla debugowania
-                throw new InvalidOperationException($"Failed to save events: {ex.Message}", ex);
+                // Lepsze logowanie błędów
+                var details = string.Join(", ", ex.WriteErrors.Select(e => $"Index: {e.Index}, Code: {e.Code}, Message: {e.Message}"));
+                throw new InvalidOperationException($"Failed to save events. Details: {details}", ex);
+            }
+            catch (MongoWriteException ex)
+            {
+                throw new InvalidOperationException($"Failed to save event: Code {ex.WriteError.Code}, Message: {ex.WriteError.Message}", ex);
             }
         }
     }
