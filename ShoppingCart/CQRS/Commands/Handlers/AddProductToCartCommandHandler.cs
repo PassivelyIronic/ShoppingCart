@@ -29,8 +29,6 @@ namespace ShoppingCart.CQRS.Commands.Handlers
 
             var product = await _productService.GetProductByIdAsync(request.ProductId);
 
-            // Event Sourcing - operacja jest zawsze wykonywana
-            // Konflikt zostanie rozwiązany na poziomie agregatu
             aggregate.AddProduct(request.ProductId, request.Quantity, product.Price, product.Name);
 
             await _repository.SaveAsync(aggregate);

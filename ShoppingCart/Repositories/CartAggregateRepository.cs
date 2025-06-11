@@ -112,37 +112,42 @@ namespace ShoppingCart.Repositories
                 allEvents = uncommittedEvents;
             }
 
-            // 2. Zapisz w event store (dla historii)
+            // 2. Zapisz w event store (dla historii) - to ustawi sequence numbers
             await _eventStore.SaveEventsAsync(uncommittedEvents);
 
-            // 3. Utwórz finalne Cart do zapisania w kolekcji carts
+            // 3. POPRAWKA: Po zapisaniu eventów w EventStore, odtwórz agregat z wszystkimi eventami
+            // aby mieć poprawną wersję z sequence number eventu checkout
+            var completeEvents = await _eventStore.GetEventsForCartAsync(aggregate.Id);
+            var rebuiltAggregate = CartAggregate.FromEvents(completeEvents);
+
+            // 4. Utwórz finalne Cart do zapisania w kolekcji carts z poprawną wersją
             var finalCart = new Cart
             {
-                Id = aggregate.Id,
-                UserId = aggregate.UserId,
-                Items = aggregate.Items,
+                Id = rebuiltAggregate.Id,
+                UserId = rebuiltAggregate.UserId,
+                Items = rebuiltAggregate.Items,
                 IsCheckedOut = true,
-                Version = aggregate.Version,
+                Version = rebuiltAggregate.Version, // To będzie sequence number eventu checkout
                 LastModified = DateTime.UtcNow
             };
 
-            // 4. Zapisz w kolekcji carts
+            // 5. Zapisz w kolekcji carts
             await _carts.InsertOneAsync(finalCart);
 
-            // 5. Oznacz cartAggregate jako checkout i zachowaj wszystkie eventy
+            // 6. Oznacz cartAggregate jako checkout i zachowaj wszystkie eventy z poprawnymi sequence numbers
             var finalCartDoc = new CartAggregateDocument
             {
-                Id = aggregate.Id,
-                UserId = aggregate.UserId,
-                Events = allEvents,
+                Id = rebuiltAggregate.Id,
+                UserId = rebuiltAggregate.UserId,
+                Events = completeEvents, // Użyj eventów z EventStore z poprawnymi sequence numbers
                 IsCheckedOut = true,
-                Version = aggregate.Version,
+                Version = rebuiltAggregate.Version, // Poprawna wersja z sequence number checkout eventu
                 LastModified = DateTime.UtcNow
             };
 
             if (existingDoc != null)
             {
-                await _cartAggregates.ReplaceOneAsync(x => x.Id == aggregate.Id, finalCartDoc);
+                await _cartAggregates.ReplaceOneAsync(x => x.Id == rebuiltAggregate.Id, finalCartDoc);
             }
             else
             {
@@ -152,17 +157,21 @@ namespace ShoppingCart.Repositories
 
         private async Task UpdateCartAggregateAsync(CartAggregate aggregate, List<CartEvent> uncommittedEvents)
         {
-            // Zapisz eventy w event store
+            // 1. Zapisz eventy w event store - to ustawi sequence numbers
             await _eventStore.SaveEventsAsync(uncommittedEvents);
 
-            // Aktualizuj cartAggregate
+            // 2. POPRAWKA: Po zapisaniu eventów, odbuduj agregat aby mieć poprawną wersję
+            var allEvents = await _eventStore.GetEventsForCartAsync(aggregate.Id);
+            var rebuiltAggregate = CartAggregate.FromEvents(allEvents);
+
+            // 3. Aktualizuj cartAggregate
             var existingDoc = await _cartAggregates.Find(x => x.Id == aggregate.Id).FirstOrDefaultAsync();
 
             if (existingDoc != null)
             {
-                // Dodaj nowe eventy do istniejących
-                existingDoc.Events.AddRange(uncommittedEvents);
-                existingDoc.Version = aggregate.Version;
+                // Użyj wszystkich eventów z EventStore z poprawnymi sequence numbers
+                existingDoc.Events = allEvents;
+                existingDoc.Version = rebuiltAggregate.Version; // Wersja z ostatniego sequence number
                 existingDoc.LastModified = DateTime.UtcNow;
 
                 await _cartAggregates.ReplaceOneAsync(x => x.Id == aggregate.Id, existingDoc);
@@ -172,11 +181,11 @@ namespace ShoppingCart.Repositories
                 // Utwórz nowy dokument
                 var newDoc = new CartAggregateDocument
                 {
-                    Id = aggregate.Id,
-                    UserId = aggregate.UserId,
-                    Events = uncommittedEvents,
+                    Id = rebuiltAggregate.Id,
+                    UserId = rebuiltAggregate.UserId,
+                    Events = allEvents, // Wszystkie eventy z EventStore
                     IsCheckedOut = false,
-                    Version = aggregate.Version,
+                    Version = rebuiltAggregate.Version, // Poprawna wersja
                     LastModified = DateTime.UtcNow
                 };
 

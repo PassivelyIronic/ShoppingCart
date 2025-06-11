@@ -49,21 +49,12 @@ namespace ShoppingCart.Models
             if (quantity <= 0)
                 throw new ArgumentException("Quantity must be greater than zero");
 
-            // POPRAWKA: Sprawdź czy produkt już istnieje - Event Sourcing powinien to uwzględniać
-            var existingItem = Items.FirstOrDefault(i => i.ProductId == productId);
-            var finalQuantity = quantity;
-
-            if (existingItem != null)
-            {
-                finalQuantity = existingItem.Quantity + quantity;
-            }
-
             var evt = new ProductAddedToCartEvent
             {
                 CartId = Id,
                 UserId = UserId,
                 ProductId = productId,
-                Quantity = quantity, // Ilość dodawana, nie finalna
+                Quantity = quantity,
                 Price = price,
                 ProductName = productName
             };
@@ -80,7 +71,6 @@ namespace ShoppingCart.Models
             if (string.IsNullOrEmpty(productId))
                 throw new ArgumentException("Product ID cannot be empty");
 
-            // POPRAWKA: Sprawdź czy produkt istnieje przed usunięciem
             var existingItem = Items.FirstOrDefault(i => i.ProductId == productId);
             if (existingItem == null)
                 throw new InvalidOperationException($"Product {productId} not found in cart");
@@ -104,7 +94,6 @@ namespace ShoppingCart.Models
             if (!Items.Any())
                 throw new InvalidOperationException("Cannot checkout empty cart");
 
-            // POPRAWKA: Oblicz wartości PRZED utworzeniem eventu
             var totalValue = TotalValue;
             var totalItems = Items.Sum(i => i.Quantity);
 
@@ -130,7 +119,6 @@ namespace ShoppingCart.Models
                     break;
 
                 case ProductAddedToCartEvent added:
-                    // POPRAWKA: Nie mutuj istniejących obiektów - twórz nowe
                     var existingItemIndex = Items.FindIndex(i => i.ProductId == added.ProductId);
                     if (existingItemIndex >= 0)
                     {
@@ -139,7 +127,7 @@ namespace ShoppingCart.Models
                         {
                             ProductId = existingItem.ProductId,
                             Quantity = existingItem.Quantity + added.Quantity,
-                            Price = added.Price, // Może się zmienić cena
+                            Price = added.Price,
                             Name = added.ProductName
                         };
                     }
@@ -164,7 +152,9 @@ namespace ShoppingCart.Models
                     break;
             }
 
-            Version = evt.SequenceNumber;
+            // POPRAWKA: Version zawsze ustawiana na sequence number eventu
+            // Jeśli event nie ma jeszcze sequence number (uncommitted), zachowaj poprzednią wersję + 1
+            Version = evt.SequenceNumber > 0 ? evt.SequenceNumber : Version + 1;
         }
 
         public List<CartEvent> GetUncommittedEvents()
@@ -178,8 +168,6 @@ namespace ShoppingCart.Models
         }
 
         public decimal TotalValue => Items.Sum(i => i.Price * i.Quantity);
-
-        // DODANE: Metoda do sprawdzenia stanu koszyka
         public bool HasItems => Items.Any();
         public int TotalItemsCount => Items.Sum(i => i.Quantity);
     }

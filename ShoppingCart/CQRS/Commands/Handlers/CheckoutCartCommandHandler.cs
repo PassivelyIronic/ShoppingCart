@@ -24,7 +24,6 @@ namespace ShoppingCart.CQRS.Commands.Handlers
             if (aggregate == null)
                 throw new InvalidOperationException("Cart not found");
 
-            // DODANE: Walidacja produktów przed checkout
             foreach (var item in aggregate.Items)
             {
                 try
